@@ -78,9 +78,9 @@ typedef void(*FreeListElement)(ListElement);
 * Type of function that can be used by the list for sorting or finding.
 * This function should return a value greater than 0 if the second element is
 * greater, 0 if they're equal and a number smaller than 0 if the first
-* element is greater.
-* For example, the following function can use to sort a list of integers
-* according to which is closer to a given number (given as the key)
+* element is greater.                                                       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* For example, the following function can use to sort a list of integers    !!                IMPORTANT                !!
+* according to which is closer to a given number (given as the key)         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 * @code
 * int closerTo(ListElement num1, ListElement num2) {
 *   return *(int*)num2 - *(int*)num1;
