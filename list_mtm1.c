@@ -4,11 +4,21 @@
 #include "list_mtm1.h"
 
 
+
 typedef struct node* Node;
 struct node {
     ListElement data;
     Node next;
 };
+// recives two pointers to nodes a and b, swaps the data that each of the node contains. The next field isn't affected.
+static void swap(struct node* a, struct node *b);
+
+static void swap(struct node *a, struct node *b) {
+    ListElement temp = a->data;
+    a->data = b->data;
+    b->data = temp;
+    return;
+}
 
 static Node CreateNode(ListElement new_data, CopyListElement CopyE){
     assert(CopyE);
@@ -32,23 +42,7 @@ static void DestroyNode(Node target, FreeListElement FreeE){
     free(target);
     return;
 }
-//
-static Node CopyNode(Node source, CopyListElement CopyE){
-    Node destination=malloc(sizeof(*destination));
-    if(destination==NULL){
-        return NULL;
-    }
-    ListElement TempElement=CopyE(source);
-    if(TempElement==NULL){
-        free(destination);
-        return NULL;
-    }
-    destination->data=TempElement;
-    destination->next=NULL;
-    return destination;
 
-}
-//
 struct list_t {
     Node head;
     Node iterator;
@@ -58,7 +52,6 @@ struct list_t {
 };
 
 List listCreate(CopyListElement copyElement, FreeListElement freeElement){
-    assert(copyElement && freeElement);
     if(copyElement ==NULL || freeElement==NULL){
         return NULL;
     }
@@ -79,36 +72,70 @@ void listDestroy(List list){
     if(list==NULL){
         return;
     }
-    for(int j=0; j<list->size; j++){
-        DestroyNode(&list->head[j], list->FreeE);                         // listGetFirst(list) or list->head?
+
+    if(list->size==1){
+        DestroyNode(list->head,list->FreeE);
+        free(list);
+        return;
+    }
+    Node ptr1= list->head;
+    Node ptr2= ptr1->next;
+    for(;ptr2->next!=NULL;ptr2=ptr2->next){        // Yesh po makom leshgiot!!!!!!!!!!!!!!!!!!!!!
+        DestroyNode(ptr1,list->FreeE);
+        ptr1=ptr2;
     }
     free(list);
     return;
 }
 
 List listCopy(List list){
-    assert(list);
     if(list==NULL){
         return NULL;
     }
+    assert(list);
     List tmp_list=listCreate(list->CopyE, list->FreeE);
     if(tmp_list==NULL) {
         return NULL;
     }
-    for(int i=0; i<list->size; i++) {
-        Node tmp_node=CopyNode(&list->head[i],list->CopyE);              // using head instead of iterator, use caution.
-        if(tmp_node==NULL){
-            listDestroy(tmp_list);
+    Node nodeptr=list->head;
+    for (;  nodeptr!=NULL ; nodeptr=nodeptr->next) {
+        ListElement tmp_element = list->CopyE(nodeptr->data);       // copying the current elemeent from the og list
+        if (tmp_element == NULL) {
+            listDestroy(tmp_list);                          // Should i destroy tmp_element aswell?
             return NULL;
         }
-        if(i==0){
-            list->head=tmp_node;
+        if(nodeptr==list->head) {
+            Node tmp_node = CreateNode(tmp_element, list->CopyE);
+            if (tmp_node == NULL) {
+                listDestroy(tmp_list);
+                DestroyNode(tmp_node, list->FreeE);
+                return NULL;
+            }
+            tmp_list->head = tmp_node;
         }
-        list->iterator=tmp_node;
-        list->size++;
+        else{
+            if (nodeptr==list->iterator){
+                Node tmp_node=CreateNode(tmp_element, list->CopyE);
+                if(tmp_node==NULL){
+                    listDestroy(tmp_list);
+                    DestroyNode(tmp_node, list->FreeE);
+                    return NULL;
+                }
+                tmp_list->iterator=tmp_node;
+            }
+            else{
+                ListResult res = listInsertLast(tmp_list, nodeptr->data);
+                if(res!=LIST_SUCCESS)
+                {
+                    listDestroy(tmp_list);
+                    return NULL;
+                }
+            }
+        }
 
     }
-    return LIST_SUCCESS;
+    tmp_list->size=list->size;
+    return tmp_list;
 }
 
 int listGetSize(List list){
@@ -124,7 +151,7 @@ ListElement listGetFirst(List list){
         return NULL;
     }
     list->iterator=list->head;
-    return list->head;
+    return list->head->data;
 }
 
 ListElement listGetNext(List list){
@@ -157,10 +184,10 @@ ListResult listInsertFirst(List list, ListElement element){
 }
 
 ListResult listInsertLast(List list, ListElement element){
-    assert(list && element);
     if(list==NULL) {
         return LIST_NULL_ARGUMENT;
     }
+    assert(list && element);
     ListElement tmp_element=list->CopyE(element);
     if(tmp_element==NULL){
         return LIST_OUT_OF_MEMORY;
@@ -170,17 +197,20 @@ ListResult listInsertLast(List list, ListElement element){
         free(tmp_element);
         return LIST_OUT_OF_MEMORY;
     }
-    list->head[list->size-1].next=tmp_node;          // Going to the last node and changing the 'next' field to the tmp_node
+    Node lastNodePtr=list->head;                    // from here we:
+    for (int i = 0; i < list->size-1; i++) {
+        lastNodePtr=lastNodePtr->next;
+    }
+    lastNodePtr->next=tmp_node;                       // Going to the last node and changing the 'next' field to the tmp_node
     list->size++;
     return LIST_SUCCESS;
 }
 
 ListResult listInsertBeforeCurrent(List list, ListElement element){
-    assert(list && element);
-    int i;                                                  // to be used later.
     if(list==NULL) {
         return LIST_NULL_ARGUMENT;
     }
+    assert(list && element);
     if(list->iterator==NULL){
         return LIST_INVALID_CURRENT;
     }
@@ -189,6 +219,7 @@ ListResult listInsertBeforeCurrent(List list, ListElement element){
         return LIST_OUT_OF_MEMORY;
     }
     Node tmp_node=CreateNode(tmp_element, list->CopyE);           // the created node's 'next' field points to NULL.
+    free(tmp_element);                                            // Both CopyE and CreateNode allocate memory for the element.
     if(tmp_node==NULL){
         free(tmp_element);
         return LIST_OUT_OF_MEMORY;
@@ -199,12 +230,11 @@ ListResult listInsertBeforeCurrent(List list, ListElement element){
     }
     else{
         tmp_node->next=list->iterator;
-        for(i=0; i<list->size; i++){                            // finding the node before the current one.
-            if(list->head[i].next==list->iterator){
-                break;
-            }
+        Node nodeptr=list->head;                          // finding the node before the current one
+        while(nodeptr->next != list->iterator){
+            nodeptr=nodeptr->next;
         }
-        list->head[i].next=tmp_element;
+        nodeptr->next=tmp_node;
     }
     list->size++;
     return LIST_SUCCESS;
@@ -235,35 +265,23 @@ ListResult listInsertAfterCurrent(List list, ListElement element){
 
 ListResult listRemoveCurrent(List list){
     assert(list);
-    int i;                                                      // setting the i here so for will you use it twice.
     if(list==NULL) {
         return LIST_NULL_ARGUMENT;
     }
     if(list->iterator==NULL){
         return LIST_INVALID_CURRENT;
     }
+    Node nodeBeforeTheIterator=list->head;                          // finding the node before the current one
+    while(nodeBeforeTheIterator->next != list->iterator){
+        nodeBeforeTheIterator=nodeBeforeTheIterator->next;
+    }
     if(list->iterator==list->head){                                 // if the iterator points to the first node.
        list->head=list->iterator->next;
        DestroyNode(list->iterator, list->FreeE);
     }
     else {
-        if (list->iterator == &(list->head[list->size - 1])) {                   // if the iterator points to the last node.
-            for (i = 0; i < list->size; i++) {
-                if (list->head[i].next == list->iterator) {
-                    break;
-                }
-            }
-            list->head[i].next = NULL;
-            DestroyNode(list->iterator, list->FreeE);
-        } else {                                              // if the iterator points somewhere in the middle of the linked list
-            for (i = 0; i < list->size; i++) {
-                if (list->head[i].next == list->iterator) {
-                    break;
-                }
-            }
-            list->head[i].next=list->iterator->next;
-            DestroyNode(list->iterator, list->FreeE);
-        }
+        nodeBeforeTheIterator->next=list->iterator->next;
+        DestroyNode(list->iterator, list->FreeE);
     }
     list->iterator=NULL;
     list->size--;
@@ -277,21 +295,69 @@ ListElement listGetCurrent(List list){                  // returns the data itse
     }
     return list->iterator->data;
 }
-//
-typedef int(*CompareListElements)(ListElement, ListElement);                // delet dis
-//
+
 ListResult listSort(List list, CompareListElements compareElement){
     assert(list && compareElement);
-    int i;
-    if(list == NULL || compareElement === NULL){
+    if(list == NULL || compareElement == NULL){
         return LIST_NULL_ARGUMENT;
     }
-    for(i=0; i<list->size-1; i++){
-        compareElement(list->head[i].data, list->head[i+1].data);
+    if(list->size==1 || list->size==0){            // what if size is zero? ***********************************************
+        return LIST_SUCCESS;
     }
-
+    int j=0;
+    Node nodeptr1=list->head;                  // j - will contain the index of the current iterator index. head's index is 0;
+    while(nodeptr1!=list->iterator){
+        j++;
+        nodeptr1=nodeptr1->next;
+    }
+    nodeptr1=list->head;
+    Node nodeptr2=list->head->next;
+    int n=listGetSize(list) - 1;
+    while(n!=0) {                                                                       // BUBBLE SORT
+        for (; nodeptr2->next!=NULL; nodeptr1=nodeptr1->next, nodeptr2=nodeptr2->next) {
+            if (compareElement(nodeptr1->data, nodeptr2->data) < 0) {
+                swap(nodeptr1->data, nodeptr2->data);
+            }
+        }
+        n--;
+        nodeptr1=list->head;
+        nodeptr2=list->head->next;
+    }                                                                                    // BUBBLE SORT
+    list->iterator=list->head;
+    while(j!=0){                                             // Setting the iterator to point to his original index.
+        j--;
+        list->iterator=list->iterator->next;
+    }
+    return LIST_SUCCESS;
 }
 
+List listFilter(List list, FilterListElement filterElement, ListFilterKey key){
+    if(list==NULL || filterElement==NULL){                  // No need to check if the key is NULL. <- AKA to FAQ.
+        return NULL;
+    }
+    List tmp_list=listCreate(list->CopyE, list->FreeE);                 // tmp_list's head, iterator and size are NULL/zero
+    if(tmp_list==NULL){                                                 // don't forget to tmp_list->size++ everytime...
+        return NULL;
+    }
+    for (Node nodeptr=list->head ; nodeptr!=NULL; nodeptr=nodeptr->next) {
+        if(filterElement(nodeptr->data, key)){
+            ListResult res=listInsertFirst(tmp_list, nodeptr->data);       // Will SURELY never recieve tmp_list as NULL arg.
+            if(res==LIST_OUT_OF_MEMORY){
+                return NULL;
+            }                               // Here we sure know that it's ListSuccess!!!
+        }
+    }
+    return tmp_list; // WARNING: tmp_list iterator is still set to NULL! FAQ said that listInsertFirst doesn't change the iterator
+}
+
+ListResult listClear(List list){
+    if(list==NULL){
+        return LIST_NULL_ARGUMENT;
+    }
+    Node nodeptr=list->head;
+    DestroyNode(nodeptr, list->FreeE);
+    return LIST_SUCCESS;
+}
 
 
 

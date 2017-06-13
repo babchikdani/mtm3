@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main() {
-    printf("Check, check, check out my melody\n");
+    printf("MISSION COMPLETE!\n   + RESPECT   \n");
     return 0;
 }
